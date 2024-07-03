@@ -57,15 +57,15 @@ func ReadNode(path string, isroot bool) nodes.NodeRef {
 		MtimeNsecs: uint32(statT.Mtim.Nsec),
 	}
 
-	// if info.Mode()&os.ModeSymlink != 0 {
-	// 	nref := &nodes.SymlinkRef{
-	// 		AbsPath:  path,
-	// 		Name: info.Name(),
-	// 		Stat: fstat
-	// 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		nref := &nodes.SymlinkRef{
+			AbsPath: path,
+			Name:    info.Name(),
+			Stat:    fstat,
+		}
 
-	// 	return nref
-	// }
+		return nref
+	}
 
 	if info.IsDir() {
 		nref := &nodes.FolderRef{
@@ -215,34 +215,6 @@ func (pa *PBSArchive) ToBuffer(buf *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
-
-	// goodbyeRecord := []nodes.GoodbyeItem{}
-
-	// for _, child := range topTree.GetChildren() {
-	// 	child.WriteGoodbyeItem(&goodbyeRecord)
-	// }
-
-	// goodbyeTable, err := nodes.FinishGoodbyeTable(goodbyeRecord, &pos, &dirStart)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// gbiDescriptor := pxar.PxarDescriptor{
-	// 	EntryType: pxar.PXAR_GOODBYE,
-	// 	Length:    uint64(16) + uint64(len(goodbyeTable)),
-	// }
-
-	// err = binary.Write(buf, binary.LittleEndian, gbiDescriptor)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// pos += gbiDescriptor.Length
-
-	// _, err = buf.Write(goodbyeTable)
-	// if err != nil {
-	// 	return err
-	// }
 
 	fmt.Printf("Write buffer finished on pos %d with len %d\r\n", pos, buf.Len())
 
