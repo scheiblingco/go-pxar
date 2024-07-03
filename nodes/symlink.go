@@ -16,6 +16,28 @@ func (ref *SymlinkRef) GetHash() uint64 {
 	return siphash.Hash(pxar.PXAR_HASH_KEY_1, pxar.PXAR_HASH_KEY_2, []byte(ref.Name))
 }
 
+func (ref *SymlinkRef) WriteCatalogue(buf *bytes.Buffer, pos *uint64, parentStartPos uint64) ([]byte, uint64, error) {
+	sBuf := bytes.NewBuffer([]byte{})
+
+	sBuf.WriteByte(byte(pxar.SymlinkEntry))
+	written := 1
+
+	filenameLen := MakeUvarint(uint64(len(ref.Name)))
+	n, err := sBuf.Write(filenameLen)
+	if err != nil {
+		return nil, 0, err
+	}
+	written += n
+
+	n, err = sBuf.WriteString(ref.Name)
+	if err != nil {
+		return nil, 0, err
+	}
+	written += n
+
+	return sBuf.Bytes(), uint64(written), nil
+}
+
 func (ref *SymlinkRef) WritePayload(buf *bytes.Buffer, pos *uint64) (uint64, error) {
 	startPos := *pos
 

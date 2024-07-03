@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scheiblingco/go-pxar/nodes"
+	"github.com/scheiblingco/go-pxar/pxar"
 )
 
 type VirtualFileinfo struct {
@@ -210,6 +211,7 @@ func (pa *PBSArchive) ToBuffer(buf *bytes.Buffer) error {
 	}
 
 	topTree.IsRoot = true
+	topTree.Name = pa.Filename + ".didx"
 
 	_, err = topTree.WritePayload(buf, &pos)
 	if err != nil {
@@ -217,6 +219,41 @@ func (pa *PBSArchive) ToBuffer(buf *bytes.Buffer) error {
 	}
 
 	fmt.Printf("Write buffer finished on pos %d with len %d\r\n", pos, buf.Len())
+
+	return nil
+}
+
+func (pa *PBSArchive) WriteCatalogue(buf *bytes.Buffer) error {
+	// Write magic header
+	buf.Write(pxar.CatalogMagic)
+
+	// Get parent
+	pos := uint64(0)
+	topTree, err := pa.GetParentNode()
+	if err != nil {
+		return err
+	}
+
+	topTree.IsRoot = true
+	topTree.Name = pa.Filename + ".didx"
+
+	lastBytes, n, err := topTree.WriteCatalogue(buf, &pos, pos)
+	if err != nil {
+		return err
+	}
+
+	bufLen := uint64(buf.Len())
+
+	buf.Write(nodes.MakeUvarint(uint64(len(lastBytes) + 1)))
+	buf.WriteByte(byte(0x01))
+	buf.Write(lastBytes)
+
+	buf.Write(nodes.MakeUvarint(uint64(bufLen)))
+	for buf.Len()%8 != 0 {
+		buf.WriteByte(0x00)
+	}
+
+	fmt.Printf("Wrote %d bytes to catalogue\r\n", n, lastBytes)
 
 	return nil
 }
@@ -229,9 +266,11 @@ func main() {
 	pa.AddFolder("/home/larsec/pxar-demo/test-enc")
 
 	buf := bytes.NewBuffer([]byte{})
-	pa.ToBuffer(buf)
 
-	f, err := os.OpenFile("/home/larsec/pxar-demo/test-newgo.pxar", os.O_CREATE|os.O_WRONLY, 0644)
+	// pa.ToBuffer(buf)
+	pa.WriteCatalogue(buf)
+
+	f, err := os.OpenFile("/home/larsec/pxar-demo/catalog-newgo.pcat1", os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}

@@ -22,7 +22,7 @@ type NodeRef interface {
 	GetHash() uint64
 
 	WritePayload(buf *bytes.Buffer, pos *uint64) (uint64, error)
-	// WriteCatalogue(buf *bytes.Buffer, pos *uint64) (uint64, error)
+	WriteCatalogue(buf *bytes.Buffer, pos *uint64, parentStartPos uint64) ([]byte, uint64, error)
 }
 
 // From https://github.com/protocolbuffers/protobuf-go/blob/v1.34.2/encoding/protowire/wire.go#L371
@@ -45,9 +45,10 @@ type FolderRef struct {
 	Name    string
 	Stat    Fstat
 
-	IsRoot       bool
-	Children     []NodeRef
-	GoodbyeItems []pxar.GoodbyeItem
+	IsRoot          bool
+	Children        []NodeRef
+	GoodbyeItems    []pxar.GoodbyeItem
+	CatalogueDirPos uint64
 }
 
 type FileRef struct {

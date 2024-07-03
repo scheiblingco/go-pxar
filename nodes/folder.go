@@ -16,6 +16,45 @@ func (ref *FolderRef) GetHash() uint64 {
 	return siphash.Hash(pxar.PXAR_HASH_KEY_1, pxar.PXAR_HASH_KEY_2, []byte(ref.Name))
 }
 
+func (ref *FolderRef) WriteCatalogue(buf *bytes.Buffer, pos *uint64, parentStartPos uint64) ([]byte, uint64, error) {
+	startPos := *pos
+	totalLen := uint64(0)
+	// Add folder length
+	table := bytes.NewBuffer([]byte{})
+
+	lenUvi := MakeUvarint(uint64(len(ref.Children)))
+
+	n, err := table.Write(lenUvi)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	totalLen += uint64(n)
+	*pos += uint64(n)
+
+	for _, child := range ref.Children {
+		chBytes, n, err := child.WriteCatalogue(buf, pos, startPos)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		table.Write(chBytes)
+		totalLen += uint64(len(chBytes))
+		*pos += n + uint64(len(chBytes))
+	}
+
+	buf.Write(MakeUvarint(uint64(table.Len())))
+	buf.Write(table.Bytes())
+
+	selfItem := bytes.NewBuffer([]byte{})
+	selfItem.WriteByte(byte(pxar.DirectoryEntry))
+	selfItem.Write(MakeUvarint(uint64(len(ref.Name))))
+	selfItem.WriteString(ref.Name)
+	selfItem.Write(MakeUvarint(uint64(totalLen + 1)))
+
+	return selfItem.Bytes(), totalLen, nil
+}
+
 func (ref *FolderRef) WritePayload(buf *bytes.Buffer, pos *uint64) (uint64, error) {
 	startPos := *pos
 
