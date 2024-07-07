@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sort"
 )
 
 type GoodbyeItem struct {
@@ -37,18 +36,8 @@ func (p *PxarGoodbye) Write(buf *bytes.Buffer, pos *uint64) (uint64, error) {
 
 	*pos += 16
 
-	sort.Slice(p.Items, func(i, j int) bool {
-		return p.Items[i].Hash < p.Items[j].Hash
-	})
-
 	binTree := make([]GoodbyeItem, len(p.Items))
-	MakeBinaryTree(p.Items, &binTree)
-
-	shouldBe := []byte("U\x15>u[\xed^\xef\xb0\x00\x00\x00\x00\x00\x00\x00@\x00\x00\x00\x00\x00\x00\x00")
-	shouldBeItem := GoodbyeItem{}
-	binary.Read(bytes.NewReader(shouldBe), binary.LittleEndian, &shouldBeItem)
-
-	fmt.Println(shouldBe)
+	GetBinaryHeap(p.Items, &binTree)
 
 	for _, item := range binTree {
 		item.Offset = p.GoodbyeStart - (item.Offset - item.Length)
@@ -63,10 +52,7 @@ func (p *PxarGoodbye) Write(buf *bytes.Buffer, pos *uint64) (uint64, error) {
 	}
 
 	px = buf.String()
-	pxb := bytes.NewBuffer([]byte{})
 	binary.Write(buf, binary.LittleEndian, final)
-	binary.Write(pxb, binary.LittleEndian, final)
-	px = pxb.String()
 	*pos += 24
 
 	fmt.Println(px)
@@ -91,12 +77,8 @@ func (p *PxarGoodbye) WriteStream(stream io.Writer, pos *uint64) (uint64, error)
 
 	*pos += 16
 
-	sort.Slice(p.Items, func(i, j int) bool {
-		return p.Items[i].Hash < p.Items[j].Hash
-	})
-
 	binTree := make([]GoodbyeItem, len(p.Items))
-	MakeBinaryTree(p.Items, &binTree)
+	GetBinaryHeap(p.Items, &binTree)
 
 	for _, item := range binTree {
 		item.Offset = *pos - item.Offset - item.Length

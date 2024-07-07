@@ -3,284 +3,102 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"syscall"
-	"time"
 
-	"github.com/scheiblingco/go-pxar/nodes"
 	"github.com/scheiblingco/go-pxar/pxar"
 )
 
-type VirtualFileinfo struct {
-	NameVal    string
-	SizeVal    int64
-	ModeVal    fs.FileMode
-	ModTimeVal time.Time
-	IsDirVal   bool
-	SysVal     interface{}
-}
+// The general process for the encoding is as follows:
+// 1. Create a PBSArchive struct
 
-func (vfi *VirtualFileinfo) Name() string {
-	return vfi.NameVal
-}
-func (vfi *VirtualFileinfo) Size() int64 {
-	return vfi.SizeVal
-}
-func (vfi *VirtualFileinfo) Mode() fs.FileMode {
-	return vfi.ModeVal
-}
-func (vfi *VirtualFileinfo) ModTime() time.Time {
-	return vfi.ModTimeVal
-}
-func (vfi *VirtualFileinfo) IsDir() bool {
-	return vfi.IsDirVal
-}
-func (vfi *VirtualFileinfo) Sys() interface{} {
-	return vfi.SysVal
-}
+// 2. Add files/folders. The stat/size information for each file/dir will be stored in the noderef structs.
+//    The file data/content will be read just before encoding. All the information necessary to determine the positions
+//    and lengths of all the data structs is in those structs, meaning we can take an async approach to reading
+//    and encoding the archive since we know where everything needs to go in advance without reading all data into memory
 
-func ReadNode(path string, isroot bool) nodes.NodeRef {
-	info, err := os.Lstat(path)
-	if err != nil {
-		panic(err)
-	}
+// 3. Write the archive to a buffer or stream, and then to file
 
-	statT := info.Sys().(*syscall.Stat_t)
-	fstat := nodes.Fstat{
-		Mode:       uint64(statT.Mode),
-		Uid:        statT.Uid,
-		Gid:        statT.Gid,
-		Size:       uint64(statT.Size),
-		MtimeSecs:  uint64(statT.Mtim.Sec),
-		MtimeNsecs: uint32(statT.Mtim.Nsec),
-	}
-
-	if info.Mode()&os.ModeSymlink != 0 {
-		nref := &nodes.SymlinkRef{
-			AbsPath: path,
-			Name:    info.Name(),
-			Stat:    fstat,
-		}
-
-		return nref
-	}
-
-	if info.IsDir() {
-		nref := &nodes.FolderRef{
-			AbsPath: path,
-			Name:    info.Name(),
-			Stat:    fstat,
-		}
-
-		files, err := os.ReadDir(path)
-		if err != nil {
-			panic(err)
-		}
-
-		for _, file := range files {
-			nref.Children = append(nref.Children, ReadNode(filepath.Join(path, file.Name()), false))
-		}
-
-		return nref
-	}
-
-	if info.Mode().IsRegular() {
-		nref := &nodes.FileRef{
-			AbsPath: path,
-			Name:    info.Name(),
-			Stat:    fstat,
-		}
-
-		return nref
-	}
-
-	return nil
-}
-
-type PBSArchiveInterface interface {
-	// Add Folder
-	AddFolder(path string)
-
-	// Add File
-	AddFile(path string)
-
-	// Write to file
-	ToFile(path string) error
-
-	// Write to buffer
-	ToBuffer(buf *bytes.Buffer) error
-
-	// Write to stream
-	ToStream(stream *os.File) error
-
-	// Create catalogue
-	WriteCatalogue(buf *bytes.Buffer) error
-}
-
-type PBSArchive struct {
-	// Directory Tree
-	Trees []nodes.NodeRef
-
-	// Filename
-	Filename string
-}
-
-func (pa *PBSArchive) AddFolder(path string) {
-	pa.Trees = append(pa.Trees, ReadNode(path, true))
-}
-
-func (pa *PBSArchive) AddFile(path string) {
-	pa.Trees = append(pa.Trees, ReadNode(path, true))
-}
-
-func (pa *PBSArchive) ToFile(path string) error {
-	fstr := fmt.Sprintf("%s.pxar", path)
-	f, err := os.OpenFile(fstr, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	buf := bytes.NewBuffer([]byte{})
-	err = pa.ToBuffer(buf)
-	if err != nil {
-		return err
-	}
-
-	n, err := io.Copy(f, buf)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Wrote %d bytes to file\r\n", n)
-
-	return nil
-}
-
-func (pa *PBSArchive) GetParentNode() (*nodes.FolderRef, error) {
-	var topTree *nodes.FolderRef
-
-	if _, ok := pa.Trees[0].(*nodes.FolderRef); ok && len(pa.Trees) == 1 {
-		if len(pa.Trees[0].GetChildren()) == 0 {
-			return nil, fmt.Errorf("only blank directory, no files to backup")
-		}
-
-		if _, ok := pa.Trees[0].(*nodes.FolderRef); !ok {
-			return nil, fmt.Errorf("top level item must be a directory. add multiple items/files/folders to create a virtual top directory")
-		}
-
-		topTree = pa.Trees[0].(*nodes.FolderRef)
-	} else {
-		// Create a virtual topdir if only files or multiple root folders are being backed up
-		for ti := range pa.Trees {
-			if _, ok := pa.Trees[ti].(*nodes.FolderRef); ok {
-				pa.Trees[ti].(*nodes.FolderRef).IsRoot = false
-			}
-		}
-		topTree = &nodes.FolderRef{
-			IsRoot:  true,
-			AbsPath: "/",
-			Name:    pa.Filename,
-			Stat: nodes.Fstat{
-				Mode:       syscall.S_IFDIR | 0777,
-				Uid:        0,
-				Gid:        0,
-				Size:       0,
-				MtimeSecs:  uint64(time.Now().Unix()),
-				MtimeNsecs: uint32(time.Now().UnixNano()),
-			},
-			Children: pa.Trees,
-		}
-	}
-
-	return topTree, nil
-}
-
-func (pa *PBSArchive) ToBuffer(buf *bytes.Buffer) error {
-	if len(pa.Trees) == 0 {
-		return fmt.Errorf("no items to write")
-	}
-
-	pos := uint64(0)
-	topTree, err := pa.GetParentNode()
-	if err != nil {
-		return err
-	}
-
-	topTree.IsRoot = true
-	topTree.Name = pa.Filename + ".didx"
-
-	_, err = topTree.WritePayload(buf, &pos)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Write buffer finished on pos %d with len %d\r\n", pos, buf.Len())
-
-	return nil
-}
-
-func (pa *PBSArchive) WriteCatalogue(buf *bytes.Buffer) error {
-	// Write magic header
-	buf.Write(pxar.CatalogMagic)
-
-	// Get parent
-	pos := uint64(0)
-	topTree, err := pa.GetParentNode()
-	if err != nil {
-		return err
-	}
-
-	topTree.IsRoot = true
-	topTree.Name = pa.Filename + ".didx"
-
-	lastBytes, n, err := topTree.WriteCatalogue(buf, &pos, pos)
-	if err != nil {
-		return err
-	}
-
-	bufLen := uint64(buf.Len())
-
-	buf.Write(nodes.MakeUvarint(uint64(len(lastBytes) + 1)))
-	buf.WriteByte(byte(0x01))
-	buf.Write(lastBytes)
-
-	buf.Write(nodes.MakeUvarint(uint64(bufLen)))
-	for buf.Len()%8 != 0 {
-		buf.WriteByte(0x00)
-	}
-
-	fmt.Printf("Wrote %d bytes to catalogue\r\n", n, lastBytes)
-
-	return nil
-}
+// 4. Create the catalog. Currently iterates over the tree again, should in the future be an option to generate this while writing the archive.
 
 func main() {
+	unordered := []pxar.GoodbyeItem{}
+	// intsl := []int{}
+	// tree := &BST{}
+
+	for x := 0; x < 10; x++ {
+		unordered = append(unordered, pxar.GoodbyeItem{
+			Hash:   uint64(x),
+			Offset: uint64(x),
+			Length: uint64(x),
+		})
+		// tree.insert(x)
+		// intsl = append(intsl, x)
+	}
+	// 6381579024
+
+	binTree := make([]pxar.GoodbyeItem, len(unordered))
+	pxar.GetBinaryHeap(unordered, &binTree)
+
+	// tree := make([]pxar.GoodbyeItem, len(unordered))
+	// tree2 := make([]pxar.GoodbyeItem, len(unordered))
+
+	// pxar.MakeBinaryTree(unordered, &tree)
+	// pxar.MakeBinaryTree(unordered, &tree2)
+
+	// other := make([]pxar.GoodbyeItem, len(unordered))
+
+	fmt.Println(unordered)
+
+	// Create a new PXAR archive
 	pa := PBSArchive{
 		Filename: "test.pxar",
 	}
 
-	pa.AddFolder("/home/larsec/pxar-demo/test-enc")
+	// Add one or multiple folders/files
+	// If there isn't a single top-level directory, one will be automatically created
+	// because the PXAR format requires it
+	pa.AddFolder("./test-enc")
 
+	// Create a buffer or stream to write the archive to
 	buf := bytes.NewBuffer([]byte{})
 
-	// pa.ToBuffer(buf)
-	pa.WriteCatalogue(buf)
-
-	f, err := os.OpenFile("/home/larsec/pxar-demo/catalog-newgo.pcat1", os.O_CREATE|os.O_WRONLY, 0644)
+	// Write the PXAR file to the buffer
+	err := pa.ToBuffer(buf)
 	if err != nil {
 		panic(err)
 	}
 
-	n, err := f.Write(buf.Bytes())
+	// Create a PXAR file
+	fa, err := os.OpenFile("demo.pxar", os.O_CREATE|os.O_WRONLY, 06444)
+	if err != nil {
+		panic(err)
+	}
+	defer fa.Close()
+
+	// Write the buffer to the file
+	_, err = fa.Write(buf.Bytes())
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Wrote %d bytes to file\r\n", n)
+	// Write the catalogue/pxar file to the buffer
+	catbuf := bytes.NewBuffer([]byte{})
+	err = pa.WriteCatalogue(catbuf)
+	if err != nil {
+		panic(err)
+	}
 
-	fmt.Println("Hold")
+	// Create a catalogue file
+	fc, err := os.OpenFile("demo.pcat1", os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+	defer fc.Close()
+
+	// Write the catalogue buffer to the file
+	_, err = fc.Write(catbuf.Bytes())
+	if err != nil {
+		panic(err)
+	}
 }

@@ -64,6 +64,11 @@ type PxarBlock interface {
 	WriteStream(stream io.Writer) error
 }
 
+type PxarSection interface {
+	Write(buf *bytes.Buffer, pos *uint64) (uint64, error)
+	WriteStream(stream io.Writer, pos *uint64) (uint64, error)
+}
+
 type PxarDescriptor struct {
 	EntryType uint64
 	Length    uint64
