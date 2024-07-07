@@ -50,3 +50,16 @@ func (p *PxarSymlink) WriteStream(stream io.Writer, pos *uint64) (uint64, error)
 
 	return uint64(buf.Len()), nil
 }
+
+func (p *PxarSymlink) WriteChannel(ch chan []byte, pos *uint64) (uint64, error) {
+	buf := bytes.NewBuffer([]byte{})
+
+	n, err := p.Write(buf, pos)
+	if err != nil {
+		return 0, err
+	}
+
+	ch <- buf.Bytes()
+
+	return n, nil
+}

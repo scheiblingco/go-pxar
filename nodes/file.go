@@ -96,3 +96,48 @@ func (ref *FileRef) WritePayload(buf *bytes.Buffer, pos *uint64) (uint64, error)
 
 	return *pos - startPos, nil
 }
+
+func (ref *FileRef) WritePayloadChannel(ch chan []byte, pos *uint64) (uint64, error) {
+	startPos := *pos
+
+	filename := pxar.PxarFilename{
+		Content: ref.Name,
+	}
+
+	entry := pxar.PxarEntry{
+		Mode:         ref.Stat.Mode,
+		Uid:          ref.Stat.Uid,
+		Gid:          ref.Stat.Gid,
+		MtimeSecs:    ref.Stat.MtimeSecs,
+		MtimeNanos:   ref.Stat.MtimeNsecs,
+		MtimePadding: 0,
+	}
+
+	_, err := filename.WriteChannel(ch, pos)
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = entry.WriteChannel(ch, pos)
+	if err != nil {
+		return 0, err
+	}
+
+	f, err := os.Open(ref.AbsPath)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	payload := pxar.PxarPayload{
+		Size:   uint64(ref.Stat.Size),
+		Stream: f,
+	}
+
+	_, err = payload.WriteChannel(ch, pos)
+	if err != nil {
+		return 0, err
+	}
+
+	return *pos - startPos, nil
+}

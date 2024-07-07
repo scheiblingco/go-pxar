@@ -17,20 +17,20 @@ import (
 // 	MtimePadding uint32
 // }
 
-func GetFilenameTest() pxar.PxarFilename {
-	return pxar.PxarFilename{
-		Content: "file.txt",
+func GetSymlinkTest() pxar.PxarSymlink {
+	return pxar.PxarSymlink{
+		Target: "file.txt",
 	}
 }
 
-func TestWriteFilename(t *testing.T) {
-	pf := GetFilenameTest()
+func TestWriteSymlink(t *testing.T) {
+	pf := GetSymlinkTest()
 
 	wantLength := 25
 	wantData := bytes.NewBuffer([]byte{})
 
 	// PXAR_ENTRY Descriptor
-	AppendInterface(pxar.PXAR_FILENAME, wantData, t)
+	AppendInterface(pxar.PXAR_SYMLINK, wantData, t)
 
 	// Length of record
 	AppendInterface(uint64(25), wantData, t)
@@ -65,8 +65,8 @@ func TestWriteFilename(t *testing.T) {
 	}
 }
 
-func TestStreamFilename(t *testing.T) {
-	pe := GetFilenameTest()
+func TestStreamSymlink(t *testing.T) {
+	pe := GetSymlinkTest()
 
 	buf := bytes.NewBuffer([]byte{})
 	bufpos := uint64(0)
@@ -91,8 +91,8 @@ func TestStreamFilename(t *testing.T) {
 	}
 }
 
-func TestFilenameChan(t *testing.T) {
-	pe := GetFilenameTest()
+func TestSymlinkChan(t *testing.T) {
+	pe := GetSymlinkTest()
 
 	buf := bytes.NewBuffer([]byte{})
 	bufpos := uint64(0)
@@ -112,7 +112,7 @@ func TestFilenameChan(t *testing.T) {
 				chanres = append(chanres, res...)
 			case don := <-done:
 				if don != nil {
-					t.Errorf("an error occured while writing the filename %v: %e", pe, don)
+					t.Errorf("an error occured while writing the symlink %v: %e", pe, don)
 				}
 				break L
 			default:

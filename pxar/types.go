@@ -62,11 +62,13 @@ var (
 type PxarBlock interface {
 	Write(buf *bytes.Buffer) error
 	WriteStream(stream io.Writer) error
+	WriteChannel(ch chan []byte) error
 }
 
 type PxarSection interface {
 	Write(buf *bytes.Buffer, pos *uint64) (uint64, error)
 	WriteStream(stream io.Writer, pos *uint64) (uint64, error)
+	WriteChannel(ch chan []byte, pos *uint64) (uint64, error)
 }
 
 type PxarDescriptor struct {

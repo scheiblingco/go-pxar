@@ -54,3 +54,15 @@ func (p *PxarFilename) WriteStream(stream io.Writer, pos *uint64) (uint64, error
 
 	return pd.Length, nil
 }
+
+func (p *PxarFilename) WriteChannel(ch chan []byte, pos *uint64) (uint64, error) {
+	buf := bytes.NewBuffer([]byte{})
+	n, err := p.Write(buf, pos)
+	if err != nil {
+		return 0, err
+	}
+
+	ch <- buf.Bytes()
+
+	return n, nil
+}

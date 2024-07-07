@@ -31,6 +31,7 @@ type NodeRef interface {
 
 	// Write the payload of the node and any children to the buffer, return the written bytes and any errors
 	WritePayload(buf *bytes.Buffer, pos *uint64) (uint64, error)
+	WritePayloadChannel(ch chan []byte, pos *uint64) (uint64, error)
 
 	// Write the catalogue of the node and any children to the buffer, return the written bytes and any errors
 	// For directories, it will write it's own entry (including children) to the buffer AND return itself to the
@@ -106,7 +107,21 @@ type SocketRef struct {
 	Stat    Fstat
 }
 
-func ReadNode(path string, isroot bool) NodeRef {
+func ReadNode(path string, isroot bool, rootpath string) NodeRef {
+	if isroot {
+		rootpath = path
+	}
+
+	absp := filepath.Clean(path)
+	if !filepath.IsAbs(path) {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			panic(err)
+		}
+
+		absp = abs
+	}
+
 	info, err := os.Lstat(path)
 	if err != nil {
 		panic(err)
@@ -123,8 +138,10 @@ func ReadNode(path string, isroot bool) NodeRef {
 	}
 
 	if info.Mode()&os.ModeSymlink != 0 {
+		// TODO: Check if target for symlink is in rootpath
+
 		nref := &SymlinkRef{
-			AbsPath: path,
+			AbsPath: absp,
 			Name:    info.Name(),
 			Stat:    fstat,
 		}
@@ -134,7 +151,7 @@ func ReadNode(path string, isroot bool) NodeRef {
 
 	if info.IsDir() {
 		nref := &FolderRef{
-			AbsPath: path,
+			AbsPath: absp,
 			Name:    info.Name(),
 			Stat:    fstat,
 		}
@@ -145,7 +162,7 @@ func ReadNode(path string, isroot bool) NodeRef {
 		}
 
 		for _, file := range files {
-			nref.Children = append(nref.Children, ReadNode(filepath.Join(path, file.Name()), false))
+			nref.Children = append(nref.Children, ReadNode(filepath.Join(path, file.Name()), false, rootpath))
 		}
 
 		return nref
@@ -153,7 +170,7 @@ func ReadNode(path string, isroot bool) NodeRef {
 
 	if info.Mode().IsRegular() {
 		nref := &FileRef{
-			AbsPath: path,
+			AbsPath: absp,
 			Name:    info.Name(),
 			Stat:    fstat,
 		}

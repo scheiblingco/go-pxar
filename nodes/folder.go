@@ -118,3 +118,72 @@ func (ref *FolderRef) WritePayload(buf *bytes.Buffer, pos *uint64) (uint64, erro
 
 	return *pos - startPos, nil
 }
+
+func (ref *FolderRef) WritePayloadChannel(ch chan []byte, pos *uint64) (uint64, error) {
+	startPos := *pos
+
+	if len(ref.GoodbyeItems) > 0 {
+		// Reset goodbye items in case file is written more than once
+		ref.GoodbyeItems = []pxar.GoodbyeItem{}
+	}
+
+	if !ref.IsRoot {
+		filename := pxar.PxarFilename{
+			Content: ref.Name,
+		}
+
+		n, err := filename.WriteChannel(ch, pos)
+		if err != nil {
+			return 0, err
+		}
+
+		fmt.Printf("Filename %s is %d bytes (+ entry bytes 56)\r\n", ref.Name, n)
+	}
+
+	folderStart := *pos
+
+	entry := pxar.PxarEntry{
+		Mode:         ref.Stat.Mode,
+		Uid:          ref.Stat.Uid,
+		Gid:          ref.Stat.Gid,
+		MtimeSecs:    ref.Stat.MtimeSecs,
+		MtimeNanos:   ref.Stat.MtimeNsecs,
+		MtimePadding: 0,
+	}
+
+	_, err := entry.WriteChannel(ch, pos)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, child := range ref.Children {
+		n, err := child.WritePayloadChannel(ch, pos)
+		if err != nil {
+			return 0, err
+		}
+
+		ref.GoodbyeItems = append(ref.GoodbyeItems, pxar.GoodbyeItem{
+			Hash:   child.GetHash(),
+			Offset: *pos,
+			Length: n,
+		})
+	}
+
+	gbi := pxar.PxarGoodbye{
+		Items:        ref.GoodbyeItems,
+		FolderStart:  folderStart,
+		GoodbyeStart: *pos,
+	}
+
+	_, err = gbi.WriteChannel(ch, pos)
+	if err != nil {
+		return 0, err
+	}
+
+	if ref.IsRoot {
+		// Write special catalogue pointer
+		fmt.Println("Root")
+	}
+
+	return *pos - startPos, nil
+}

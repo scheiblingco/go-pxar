@@ -19,7 +19,9 @@ I wanna begin by giving a special thanks to [https://github.com/tizbac/proxmoxba
 
 ## Roadmap
 - [ ] Misc. Todo
-  - [ ] Convert all paths to abspath in noderef instead of adding relative paths as-is, that way we can determine if a symlink target is in-tree as well.
+  - [X] Convert all paths to abspath in noderef instead of adding relative paths as-is, that way we can determine if a symlink target is in-tree as well.
+  - [ ] Verify that link targets are in rootpath, possibly modify to convert to relative paths so they work no matter where an archive is unpacked
+  - [ ] Concurrent Uploads/PXAR Encoding
   - [ ] Add a `--debug` flag to the CLI to enable debug logging
 - [ ] PXAR Archives
   - [ ] PXAR Creation
@@ -51,7 +53,6 @@ I wanna begin by giving a special thanks to [https://github.com/tizbac/proxmoxba
     - [ ] Blob Data
 - [ ] Maybe in the future
   - [ ] Windows Support
-  - [ ] Concurrent Uploads/PXAR Encoding
 
 
 ## Format Overview

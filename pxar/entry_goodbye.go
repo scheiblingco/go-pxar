@@ -20,8 +20,7 @@ type PxarGoodbye struct {
 }
 
 func (p *PxarGoodbye) Write(buf *bytes.Buffer, pos *uint64) (uint64, error) {
-	px := ""
-
+	fmt.Println("Starting goodbye at", *pos)
 	pd := PxarDescriptor{
 		EntryType: PXAR_GOODBYE,
 		Length: 40 + uint64(
@@ -51,18 +50,14 @@ func (p *PxarGoodbye) Write(buf *bytes.Buffer, pos *uint64) (uint64, error) {
 		Hash:   PXAR_GOODBYE_TAIL_MARKER,
 	}
 
-	px = buf.String()
 	binary.Write(buf, binary.LittleEndian, final)
 	*pos += 24
 
-	fmt.Println(px)
-
+	fmt.Println("Finishing goodbye at ", *pos)
 	return pd.Length, nil
 }
 
 func (p *PxarGoodbye) WriteStream(stream io.Writer, pos *uint64) (uint64, error) {
-	entryPos := *pos
-
 	pd := PxarDescriptor{
 		EntryType: PXAR_GOODBYE,
 		Length: 40 + uint64(
@@ -81,27 +76,31 @@ func (p *PxarGoodbye) WriteStream(stream io.Writer, pos *uint64) (uint64, error)
 	GetBinaryHeap(p.Items, &binTree)
 
 	for _, item := range binTree {
-		item.Offset = *pos - item.Offset - item.Length
+		item.Offset = p.GoodbyeStart - (item.Offset - item.Length)
 		binary.Write(stream, binary.LittleEndian, item)
 		*pos += 24
 	}
 
 	final := &GoodbyeItem{
-		Offset: *pos,
+		Offset: p.GoodbyeStart - p.FolderStart,
 		Length: pd.Length,
 		Hash:   PXAR_GOODBYE_TAIL_MARKER,
 	}
 
 	binary.Write(stream, binary.LittleEndian, final)
-
 	*pos += 24
 
-	if entryPos != (*pos - pd.Length) {
-		return 0, &PxarPayloadSizeError{
-			Expected: pd.Length,
-			Actual:   *pos - entryPos,
-		}
+	return pd.Length, nil
+}
+
+func (p *PxarGoodbye) WriteChannel(ch chan []byte, pos *uint64) (uint64, error) {
+	buf := bytes.NewBuffer([]byte{})
+	n, err := p.Write(buf, pos)
+	if err != nil {
+		return 0, err
 	}
 
-	return pd.Length, nil
+	ch <- buf.Bytes()
+
+	return n, nil
 }

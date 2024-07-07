@@ -81,3 +81,48 @@ func TestStreamPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestPayloadChan(t *testing.T) {
+	pe := GetPayloadTest()
+	pe2 := GetPayloadTest()
+
+	buf := bytes.NewBuffer([]byte{})
+	bufpos := uint64(0)
+
+	ch := make(chan []byte)
+	done := make(chan error)
+	chanpos := uint64(0)
+	chanres := []byte{}
+
+	pe.Write(buf, &bufpos)
+
+	go func() {
+	L:
+		for {
+			select {
+			case res := <-ch:
+				chanres = append(chanres, res...)
+			case don := <-done:
+				if don != nil {
+					t.Errorf("an error occured while writing the entry %v: %e", pe, don)
+				}
+				break L
+			default:
+				continue
+			}
+		}
+	}()
+
+	pe2.WriteChannel(ch, &chanpos)
+	done <- nil
+
+	bufBytes := buf.Bytes()
+
+	for i := range bufBytes {
+		if bufBytes[i] != chanres[i] {
+			t.Errorf("mismatch at position %d, expected %b but got %b", i, bufBytes[i], chanres[i])
+		}
+	}
+
+	close(ch)
+}

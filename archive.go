@@ -34,12 +34,12 @@ type PBSArchive struct {
 
 // Add a top-level folder to the archive
 func (pa *PBSArchive) AddFolder(path string) {
-	pa.Trees = append(pa.Trees, nodes.ReadNode(path, true))
+	pa.Trees = append(pa.Trees, nodes.ReadNode(path, true, ""))
 }
 
 // Add a "top-level" file to the archive
 func (pa *PBSArchive) AddFile(path string) {
-	pa.Trees = append(pa.Trees, nodes.ReadNode(path, true))
+	pa.Trees = append(pa.Trees, nodes.ReadNode(path, true, ""))
 }
 
 // Returns a single node that we can use as a top-level node in the archive.
@@ -110,6 +110,33 @@ func (pa *PBSArchive) ToBuffer(buf *bytes.Buffer) error {
 	}
 
 	fmt.Printf("Write buffer finished on pos %d with len %d\r\n", pos, buf.Len())
+
+	return nil
+}
+
+// Writes the pxar archive to a buffer.
+func (pa *PBSArchive) ToChannel(ch chan []byte) error {
+	if len(pa.Trees) == 0 {
+		return fmt.Errorf("no items to write")
+	}
+
+	// Get the parent node, and call the recursive WritePayload function
+	// to write all data to the buffer
+	pos := uint64(0)
+	topTree, err := pa.GetParentNode()
+	if err != nil {
+		return err
+	}
+
+	topTree.IsRoot = true
+	topTree.Name = pa.Filename + ".didx"
+
+	_, err = topTree.WritePayloadChannel(ch, &pos)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Write buffer finished on pos %d\r\n", pos)
 
 	return nil
 }

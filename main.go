@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-
-	"github.com/scheiblingco/go-pxar/pxar"
 )
 
 // The general process for the encoding is as follows:
@@ -21,34 +19,6 @@ import (
 // 4. Create the catalog. Currently iterates over the tree again, should in the future be an option to generate this while writing the archive.
 
 func main() {
-	unordered := []pxar.GoodbyeItem{}
-	// intsl := []int{}
-	// tree := &BST{}
-
-	for x := 0; x < 10; x++ {
-		unordered = append(unordered, pxar.GoodbyeItem{
-			Hash:   uint64(x),
-			Offset: uint64(x),
-			Length: uint64(x),
-		})
-		// tree.insert(x)
-		// intsl = append(intsl, x)
-	}
-	// 6381579024
-
-	binTree := make([]pxar.GoodbyeItem, len(unordered))
-	pxar.GetBinaryHeap(unordered, &binTree)
-
-	// tree := make([]pxar.GoodbyeItem, len(unordered))
-	// tree2 := make([]pxar.GoodbyeItem, len(unordered))
-
-	// pxar.MakeBinaryTree(unordered, &tree)
-	// pxar.MakeBinaryTree(unordered, &tree2)
-
-	// other := make([]pxar.GoodbyeItem, len(unordered))
-
-	fmt.Println(unordered)
-
 	// Create a new PXAR archive
 	pa := PBSArchive{
 		Filename: "test.pxar",
@@ -67,6 +37,34 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	ch := make(chan []byte, 10)
+	done := make(chan error)
+	chanres := []byte{}
+
+	go func() {
+	L:
+		for {
+			select {
+			case res := <-ch:
+				fmt.Printf("Appending %d bytes...\r\n", len(res))
+				chanres = append(chanres, res...)
+			case don := <-done:
+				if don != nil {
+					panic(fmt.Errorf("an error occured while writing the data: %e", don))
+				}
+				break L
+			default:
+				continue
+			}
+		}
+	}()
+
+	err = pa.ToChannel(ch)
+	if err != nil {
+		panic(err)
+	}
+	// done <- nil
 
 	// Create a PXAR file
 	fa, err := os.OpenFile("demo.pxar", os.O_CREATE|os.O_WRONLY, 06444)
