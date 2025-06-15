@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -20,6 +21,12 @@ type PBSArchiveInterface interface {
 	// Write to buffer
 	ToBuffer(buf *bytes.Buffer) error
 
+	// Write to buffer asynchronously (concurrent file processing)
+	ToBufferAsync(buf *bytes.Buffer) error
+
+	// Write to channel asynchronously (concurrent file processing)
+	ToChannelAsync(ch chan []byte) error
+
 	// Create catalogue
 	WriteCatalogue(buf *bytes.Buffer) error
 }
@@ -30,6 +37,12 @@ type PBSArchive struct {
 
 	// Filename of the resulting archive
 	Filename string
+
+	// Enable asynchronous archive creation (concurrent file processing)
+	AsyncMode bool
+
+	// Number of workers for async processing (default: number of CPUs)
+	AsyncWorkers int
 }
 
 // Add a top-level folder to the archive
@@ -175,6 +188,68 @@ func (pa *PBSArchive) WriteCatalogue(buf *bytes.Buffer) error {
 	}
 
 	fmt.Printf("wrote %d bytes to catalogue\r\n", n)
+
+	return nil
+}
+
+// Get the number of workers for async processing
+func (pa *PBSArchive) getWorkerCount() int {
+	if pa.AsyncWorkers > 0 {
+		return pa.AsyncWorkers
+	}
+	return runtime.NumCPU()
+}
+
+// Writes the pxar archive to a buffer asynchronously with concurrent file processing.
+func (pa *PBSArchive) ToBufferAsync(buf *bytes.Buffer) error {
+	if len(pa.Trees) == 0 {
+		return fmt.Errorf("no items to write")
+	}
+
+	// Get the parent node
+	pos := uint64(0)
+	topTree, err := pa.GetParentNode()
+	if err != nil {
+		return err
+	}
+
+	topTree.IsRoot = true
+	topTree.Name = pa.Filename + ".didx"
+
+	// Use async writing with the specified number of workers
+	_, err = topTree.WritePayloadAsync(buf, &pos, pa.getWorkerCount())
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Write buffer (async) finished on pos %d with len %d\r\n", pos, buf.Len())
+
+	return nil
+}
+
+// Writes the pxar archive to a channel asynchronously with concurrent file processing.
+func (pa *PBSArchive) ToChannelAsync(ch chan []byte) error {
+	if len(pa.Trees) == 0 {
+		return fmt.Errorf("no items to write")
+	}
+
+	// Get the parent node
+	pos := uint64(0)
+	topTree, err := pa.GetParentNode()
+	if err != nil {
+		return err
+	}
+
+	topTree.IsRoot = true
+	topTree.Name = pa.Filename + ".didx"
+
+	// Use async writing with the specified number of workers
+	_, err = topTree.WritePayloadChannelAsync(ch, &pos, pa.getWorkerCount())
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Write channel (async) finished on pos %d\r\n", pos)
 
 	return nil
 }

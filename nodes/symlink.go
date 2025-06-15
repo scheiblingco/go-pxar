@@ -125,3 +125,13 @@ func (ref *SymlinkRef) WritePayloadChannel(ch chan []byte, pos *uint64) (uint64,
 
 	return *pos - startPos, nil
 }
+
+// WritePayloadAsync implements concurrent processing - for symlinks, it's the same as synchronous
+func (ref *SymlinkRef) WritePayloadAsync(buf *bytes.Buffer, pos *uint64, workers int) (uint64, error) {
+	return ref.WritePayload(buf, pos)
+}
+
+// WritePayloadChannelAsync implements concurrent processing - for symlinks, it's the same as synchronous
+func (ref *SymlinkRef) WritePayloadChannelAsync(ch chan []byte, pos *uint64, workers int) (uint64, error) {
+	return ref.WritePayloadChannel(ch, pos)
+}

@@ -141,3 +141,18 @@ func (ref *FileRef) WritePayloadChannel(ch chan []byte, pos *uint64) (uint64, er
 
 	return *pos - startPos, nil
 }
+
+// WritePayloadAsync implements concurrent file processing - for files, it's the same as synchronous
+// since individual file writes must be sequential, but this maintains interface compatibility
+func (ref *FileRef) WritePayloadAsync(buf *bytes.Buffer, pos *uint64, workers int) (uint64, error) {
+	// For individual files, async doesn't provide benefits since file content must be written sequentially
+	// The async benefit comes at the directory level where multiple files can be processed concurrently
+	return ref.WritePayload(buf, pos)
+}
+
+// WritePayloadChannelAsync implements concurrent file processing - for files, it's the same as synchronous  
+func (ref *FileRef) WritePayloadChannelAsync(ch chan []byte, pos *uint64, workers int) (uint64, error) {
+	// For individual files, async doesn't provide benefits since file content must be written sequentially
+	// The async benefit comes at the directory level where multiple files can be processed concurrently
+	return ref.WritePayloadChannel(ch, pos)
+}

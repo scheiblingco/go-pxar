@@ -32,10 +32,31 @@ func main() {
 	// Create a buffer or stream to write the archive to
 	buf := bytes.NewBuffer([]byte{})
 
-	// Write the PXAR file to the buffer
+	// Write the PXAR file to the buffer (synchronous)
 	err := pa.ToBuffer(buf)
 	if err != nil {
 		panic(err)
+	}
+
+	// Create an async buffer for comparison
+	asyncBuf := bytes.NewBuffer([]byte{})
+	
+	// Enable async mode with 2 workers
+	pa.AsyncMode = true
+	pa.AsyncWorkers = 2
+	
+	// Write the PXAR file to the buffer (asynchronous)
+	err = pa.ToBufferAsync(asyncBuf)
+	if err != nil {
+		panic(err)
+	}
+
+	// Verify both methods produce identical results
+	if bytes.Equal(buf.Bytes(), asyncBuf.Bytes()) {
+		fmt.Printf("✓ Sync and async archives are identical (%d bytes)\n", buf.Len())
+	} else {
+		fmt.Printf("✗ Sync and async archives differ! Sync: %d bytes, Async: %d bytes\n", 
+			buf.Len(), asyncBuf.Len())
 	}
 
 	ch := make(chan []byte, 10)
@@ -60,14 +81,14 @@ func main() {
 		}
 	}()
 
-	err = pa.ToChannel(ch)
+	err = pa.ToChannelAsync(ch)
 	if err != nil {
 		panic(err)
 	}
 	// done <- nil
 
 	// Create a PXAR file
-	fa, err := os.OpenFile("demo.pxar", os.O_CREATE|os.O_WRONLY, 06444)
+	fa, err := os.OpenFile("demo.pxar", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		panic(err)
 	}

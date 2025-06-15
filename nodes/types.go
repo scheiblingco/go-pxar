@@ -33,6 +33,10 @@ type NodeRef interface {
 	WritePayload(buf *bytes.Buffer, pos *uint64) (uint64, error)
 	WritePayloadChannel(ch chan []byte, pos *uint64) (uint64, error)
 
+	// Write the payload asynchronously with concurrent file processing
+	WritePayloadAsync(buf *bytes.Buffer, pos *uint64, workers int) (uint64, error)
+	WritePayloadChannelAsync(ch chan []byte, pos *uint64, workers int) (uint64, error)
+
 	// Write the catalogue of the node and any children to the buffer, return the written bytes and any errors
 	// For directories, it will write it's own entry (including children) to the buffer AND return itself to the
 	// parent directory for inclusion in the parent table.

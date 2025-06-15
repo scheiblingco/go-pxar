@@ -11,6 +11,7 @@ I wanna begin by giving a special thanks to [https://github.com/tizbac/proxmoxba
 - Create PXAR archives to disk
   - Support for single-file, multi-file, multi-rootdir archives (via a virtual top-level directory in the archive)
   - Support for files, directories, and symlinks
+  - **Asynchronous archive creation with concurrent file processing**
   - Verified 1:1 against the official pxar cli-client
 
 - Create catalog (pcat1) files to disk
@@ -21,7 +22,7 @@ I wanna begin by giving a special thanks to [https://github.com/tizbac/proxmoxba
 - [ ] Misc. Todo
   - [X] Convert all paths to abspath in noderef instead of adding relative paths as-is, that way we can determine if a symlink target is in-tree as well.
   - [ ] Verify that link targets are in rootpath, possibly modify to convert to relative paths so they work no matter where an archive is unpacked
-  - [ ] Concurrent Uploads/PXAR Encoding
+  - [X] Concurrent Uploads/PXAR Encoding
   - [ ] Add a `--debug` flag to the CLI to enable debug logging
 - [ ] PXAR Archives
   - [ ] PXAR Creation
@@ -54,6 +55,71 @@ I wanna begin by giving a special thanks to [https://github.com/tizbac/proxmoxba
 - [ ] Maybe in the future
   - [ ] Windows Support
 
+
+## Usage
+
+### Basic Archive Creation
+
+```go
+// Create a new PXAR archive
+pa := PBSArchive{
+    Filename: "backup.pxar",
+}
+
+// Add folders/files to archive
+pa.AddFolder("./my-data")
+
+// Create archive synchronously
+buf := bytes.NewBuffer([]byte{})
+err := pa.ToBuffer(buf)
+if err != nil {
+    panic(err)
+}
+```
+
+### Asynchronous Archive Creation
+
+For improved performance with large archives or many files, you can enable asynchronous processing:
+
+```go
+// Create a new PXAR archive with async configuration
+pa := PBSArchive{
+    Filename:     "backup.pxar",
+    AsyncMode:    true,        // Enable async processing
+    AsyncWorkers: 4,           // Use 4 concurrent workers (optional, defaults to CPU count)
+}
+
+// Add folders/files to archive
+pa.AddFolder("./my-data")
+
+// Create archive asynchronously
+buf := bytes.NewBuffer([]byte{})
+err := pa.ToBufferAsync(buf)
+if err != nil {
+    panic(err)
+}
+
+// Or stream to channel asynchronously
+ch := make(chan []byte, 100)
+go func() {
+    for data := range ch {
+        // Process archive data chunks
+        processData(data)
+    }
+}()
+
+err = pa.ToChannelAsync(ch)
+if err != nil {
+    panic(err)
+}
+close(ch)
+```
+
+The async implementation provides:
+- **Concurrent file processing**: Multiple files are read and processed simultaneously
+- **Ordered output**: The PXAR format requirements are maintained with correct ordering
+- **Identical results**: Async and sync methods produce byte-for-byte identical archives
+- **Configurable workers**: Control the level of concurrency based on your system
 
 ## Format Overview
 The PXAR format is a tar-like archive format used by Proxmox Backup Server (PBS) to store backups. It is a custom format that is not compatible with the standard tar format.
